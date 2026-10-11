@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { fetchOpenIssues, fetchRepoLanguage, extractLabels } from "@/lib/github";
+import { fetchOpenIssues, fetchRepoLanguage, extractLabels, discoverPopularRepos } from "@/lib/github";
 import { buildEmbeddingText } from "@/lib/cleanText";
 import { embedTexts } from "@/lib/gemini";
 import { computeDifficulty } from "@/lib/difficulty";
@@ -59,10 +59,12 @@ async function handleIngest(req: NextRequest) {
 
   // Determine which repos to process
   const repoParam = req.nextUrl.searchParams.get("repo");
+  const discoverParam = req.nextUrl.searchParams.get("discover");
+  const langParam = req.nextUrl.searchParams.get("language");
   let reposToProcess: { owner: string; name: string }[];
 
   if (repoParam) {
-    // Process a specific repo
+    // 1. Process a specific repo
     const [owner, name] = repoParam.split("/");
     if (!owner || !name) {
       return NextResponse.json(
@@ -71,8 +73,19 @@ async function handleIngest(req: NextRequest) {
       );
     }
     reposToProcess = [{ owner, name }];
+  } else if (discoverParam === "true" || discoverParam === "1") {
+    // 2. Discover popular repos dynamically from GitHub Search API
+    const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "3", 10), 10);
+    const discovered = await discoverPopularRepos(langParam ?? undefined, 1000, limit);
+    if (discovered.length === 0) {
+      return NextResponse.json({
+        ...stats,
+        message: "No repositories discovered from GitHub matching criteria",
+      });
+    }
+    reposToProcess = discovered.map((d) => ({ owner: d.owner, name: d.name }));
   } else {
-    // Process up to 3 repos per request
+    // 3. Process up to 3 repos from seed config
     const offset = parseInt(
       req.nextUrl.searchParams.get("offset") ?? "0",
       10

@@ -101,6 +101,48 @@ export async function fetchOpenIssues(
 }
 
 /**
+ * Discover popular open-source repositories from GitHub with good-first-issues.
+ */
+export async function discoverPopularRepos(
+  language?: string,
+  minStars = 1000,
+  limit = 10
+): Promise<Array<{ owner: string; name: string; full_name: string; stars: number; language: string | null }>> {
+  let query = `stars:>${minStars} good-first-issues:>3`;
+  if (language) {
+    query += ` language:${language}`;
+  }
+
+  const url = `${GITHUB_API}/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=${limit}`;
+  const res = await fetch(url, { headers: getHeaders() });
+
+  if (!res.ok) {
+    console.error(`Failed to discover repos from GitHub: ${res.status}`);
+    return [];
+  }
+
+  const data = (await res.json()) as {
+    items?: Array<{
+      full_name: string;
+      owner: { login: string };
+      name: string;
+      stargazers_count: number;
+      language: string | null;
+    }>;
+  };
+
+  return (
+    data.items?.map((item) => ({
+      owner: item.owner.login,
+      name: item.name,
+      full_name: item.full_name,
+      stars: item.stargazers_count,
+      language: item.language,
+    })) ?? []
+  );
+}
+
+/**
  * Extract label names from GitHub's label format.
  */
 export function extractLabels(
@@ -108,3 +150,4 @@ export function extractLabels(
 ): string[] {
   return labels.map((l) => (typeof l === "string" ? l : l.name));
 }
+
