@@ -188,9 +188,12 @@ async function handleIngest(req: NextRequest) {
           github_created_at: issue.created_at,
           github_updated_at: issue.updated_at,
         });
+
+        // Cap to 50 issues per repo run to stay safely within Gemini free tier quotas
+        if (toEmbed.length >= 50) break;
       }
 
-      // 5. Embed in batches of 50
+      // 5. Embed in batches
       if (toEmbed.length > 0) {
         const texts = toEmbed.map((i) => i.embedding_text);
         const embeddings = await embedTexts(texts, "RETRIEVAL_DOCUMENT");
