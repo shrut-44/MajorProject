@@ -50,6 +50,16 @@ export async function embedTexts(
       } catch (err: unknown) {
         retries++;
         const errMsg = err instanceof Error ? err.message : String(err);
+        const isPaymentRequired =
+          errMsg.includes("402") ||
+          errMsg.includes("prepayment") ||
+          errMsg.includes("credits are depleted");
+
+        if (isPaymentRequired) {
+          // Do not retry 402 - credits are depleted
+          throw err;
+        }
+
         const isRateLimit =
           errMsg.includes("429") ||
           errMsg.includes("RESOURCE_EXHAUSTED") ||
